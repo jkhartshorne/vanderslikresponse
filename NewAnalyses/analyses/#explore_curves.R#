@@ -1,0 +1,216 @@
+# This script generates a data from a bunch of different unde
+
+library(tidyverse)
+library(DEoptim)
+
+setwd("~/repos/paper-criticalperiods_tics_response/analyses")
+source("helper_functions.R")
+
+# Helper functions for mixing and matching, to produce various curve data
+sigmoid <- function(r,a,d,e,t){
+  #r - height scale, a - slope, d - horizontal shift, e - vertical shift
+  return(r - r/(1 + exp(-a*(t - d))) + e)
+}
+
+five_pl <- function(a,b,c,d,e,t){
+  #a+d-initial height, a - lower asymptote, b - slope, c - inflection, d - upper asymptote,  e - asymmetry
+  return(a - (a-d)/((1+(t/c)^b)^e))
+}
+
+# Old HTP Model
+fit_curve_1 <- function(par){
+  #r, a, d, tc
+  sum(ifelse(tofit$t < par[4],
+             tofit$vals[tofit$t < par[4]] - par[1],
+             tofit$vals[tofit$t >= par[4]] - (par[1] - par[1]/(1+exp(-par[2]*(tofit$t[tofit$t >= par[4]] - par[3] - par[4]))))
+  )^2)
+}
+
+# CH Model
+fit_curve_2 <- function(par){
+  #r,a1,a2,d1,d2
+  ta <- (par[2]*par[4] - par[3]*par[5])/(par[2] - par[3])
+  sum(ifelse(tofit$t < ta,
+             tofit$vals[tofit$t < ta] - (par[1] - par[1]/(1+exp(-par[2]*(tofit$t[tofit$t < ta] - par[4])))),
+             tofit$vals[tofit$t >= ta] - (par[1] - par[1]/(1+exp(-par[3]*(tofit$t[tofit$t >= ta] - par[5]))))
+             )^2)
+}
+
+#5pl logistic curve
+fit_curve_3 <- function(par){
+  #a,b,c,d,e
+  sum((par[1] - (par[1] - par[4])/((1 + (tofit$t/par[3])^par[2])^par[5]) - tofit$vals)^2)
+}
+
+# CH with lower asymptote
+fit_curve_4 <- function(par){
+  #r,a1,a2,d1,d2,e
+  ta <- (par[2]*par[4] - par[3]*par[5])/(par[2] - par[3])
+  sum(ifelse(tofit$t < ta,
+             tofit$vals[tofit$t < ta] - (par[1] - par[1]/(1+exp(-par[2]*(tofit$t[tofit$t < ta] - par[4]))) + par[6]),
+             tofit$vals[tofit$t >= ta] - (par[1] - par[1]/(1+exp(-par[3]*(tofit$t[tofit$t >= ta] - par[5]))) + par[6])
+  )^2)
+}
+
+t <- seq(0, 60, by=.1) # time
+# -------------------------- Plotting for the old model -----------------------------
+vals <- vector("list", 18)
+# Flat line
+vals[[1]] <- rep(.2, 601)
+
+# Flat line with diagonal drop
+vals[[2]] <- c(rep(.2, 200), sapply(t[201:length(t)], function(t){.2 - .005*(t-20)}))
+
+# Flat line with longer diagonal drop
+vals[[3]] <- c(rep(.2, 400), sapply(t[401:length(t)], function(t){.2 - .005*(t-40)}))
+
+#Curve
+vals[[4]] <- sapply(t, function(t){sigmoid(.2,.05,3,0,t)})
+
+#Diagonal line
+vals[[5]] <- sapply(t, function(t){.2 - .003333*t})
+
+#Piecewise sigmoid with vertical drop
+vals[[6]] <- c(rep(.2, 200), sapply(t[201:length(t)], function(t){sigmoid(.2,.05,3,0,t)}))
+
+#Piecewise sigmoid with vertical drop and lower asymptote
+vals[[7]] <- c(rep(.2, 200), sapply(t[201:length(t)], function(t){sigmoid(.1,.05,3,.05,t)}))
+
+#Piecewise with vertical drop and flat lower asymptote
+vals[[8]] <- c(rep(.2, 200), rep(.05, 401))
+
+#Piecewise with vertical drop and flat lower asymptote - longer drop
+vals[[9]] <- c(rep(.2, 400), rep(.1, 201))
+
+#Piecewise sigmoid with asymmetrical drop
+#choose shape parameters such that the two sigmoids intersect at 20 years
+vals[[10]] <- c(sapply(t[0:200], function(t){sigmoid(.2,.75,18.8666,0,t)}),
+          sapply(t[201:601], function(t){sigmoid(.2,.05,3,0,t)}))
+
+#Piecewise sigmoid with asymmetrical drop and horizontal asymptote
+vals[[11]] <- c(sapply(t[0:200], function(t){sigmoid(.2,.75,20.75,0,t)}),
+               sapply(t[201:601], function(t){sigmoid(.1,.05,3,.1,t)}))
+
+#Piecewise wigmoid with asymmetrical drop and horizontal asymptote - longer
+vals[[12]] <- c(sapply(t[0:400], function(t){sigmoid(.2, .5, 41.75, 0, t)}),
+                sapply(t[401:601], function(t){sigmoid(.1, .01, 3, .1, t)}))
+
+#Piecewise sigmoid with shorter asymmetrical drop
+vals[[13]] <- c(sapply(t[0:200], function(t){sigmoid(.2,.75,21.33333,0,t)}),
+               sapply(t[201:601], function(t){sigmoid(.2,.1,30,0,t)}))
+
+#Piecewise sigmoid with asymmetric drop - longer
+vals[[14]] <- c(sapply(t[0:400], function(t){sigmoid(.2, .75, 41.75,0,t)}),
+                sapply(t[401:601], function(t){sigmoid(.2, .05, 67.5, 0, t)}))
+
+#Asymmetric sigmoid
+vals[[15]] <- sapply(t, function(t){five_pl(0, 3, 40, .2, 10, t)})
+
+#Regular sigmoid
+vals[[16]] <- c(sapply(t[0:200], function(t){sigmoid(.2, .2, 20, 0, t)}),
+                sapply(t[201:601], function(t){sigmoid(.15, .05, 6, .05, t)}))
+
+#Asymmetric sigmoid with lower asymptote
+vals[[17]] <- sapply(t, function(t){five_pl(.05, 3, 30, .2, 10, t)})
+
+#Asymmetric sigmoid with long tail
+vals[[18]] <- sapply(t, function(t){five_pl(0, 1.5, 80, .2, 10, t)})
+
+par(mfrow = c(3,6))
+
+bestvals <- matrix(nrow=4, ncol=18)
+
+for (i in 1:18){
+  tofit <- data.frame(t=t, vals=vals[[i]])
+  plot(t, vals[[i]], ylim=c(0,.25), axes=FALSE)
+  axis(side=1, cex.axis=1.5)
+  axis(side=2, cex.axis=1.5)
+  fit <- DEoptim(fit_curve_1, lower=c(0,0,-40,0), upper=c(1,1,40,40))
+  fitted_vals <- fit$optim$bestmem
+  
+  predicted <- sapply(t, function(t){piecewise_1(fitted_vals, t)})
+  lines(t, predicted, col="red", lwd=3)
+  bestvals[1, i] <- fit$optim$bestval
+}
+
+
+
+for (i in 1:18){
+  print(paste("iteration --- ", i))
+  tofit <- data.frame(t=t, vals=vals[[i]])
+  plot(t, vals[[i]], ylim=c(0,.25), axes=FALSE)
+  axis(side=1, cex.axis=1.5)
+  axis(side=2, cex.axis=1.5)
+  fit <- DEoptim(fit_curve_2, lower=c(0,0,0,-80,-80), upper=c(1,20,1,120,120), control=list(iter=400, NP=140))
+  fitted_vals <- fit$optim$bestmem
+  
+  predicted <- sapply(t, function(t){piecewise_2(fitted_vals, t)})
+  lines(t, predicted, col="red", lwd=3)
+  bestvals[2, i] <- fit$optim$bestval
+  
+}
+
+for (i in 1:18){
+  print(paste("iteration --- ", i))
+  tofit <- data.frame(t=t, vals=vals[[i]])
+  plot(t, vals[[i]], ylim=c(0,.25), axes=FALSE, ylab="", xlab="")
+  axis(side=1, cex.axis=1.5)
+  axis(side=2, cex.axis=1.5)
+  fit <- DEoptim(fit_curve_3, lower=c(0,0,0,0,1), upper=c(1,30,60,1,10))
+  fitted_vals <- fit$optim$bestmem
+  
+  predicted <- sapply(t, function(t){five_pl(fitted_vals[1], fitted_vals[2], fitted_vals[3],
+                                              fitted_vals[4], fitted_vals[5], t)})
+  lines(t, predicted, col="red", lwd=3)
+  bestvals[3, i] <- fit$optim$bestval
+  
+}
+
+for (i in 1:18){
+  print(paste("iteration --- ", i))
+  tofit <- data.frame(t=t, vals=vals[[i]])
+  plot(t, vals[[i]], ylim=c(0,.25), axes=FALSE)
+  axis(side=1, cex.axis=1.5)
+  axis(side=2, cex.axis=1.5)
+  fit <- DEoptim(fit_curve_4, lower=c(0,0,0,-80,-80,0), upper=c(1,10,1,120,120,1), control=list(iter=400))
+  fitted_vals <- fit$optim$bestmem
+  fitted_ta <- (fitted_vals[2]*fitted_vals[4] - fitted_vals[3]*fitted_vals[5])/(fitted_vals[2] - fitted_vals[3])
+  predicted <- sapply(t, function(t){if (t <= fitted_ta){
+    sigmoid(fitted_vals[1], fitted_vals[2], fitted_vals[4], fitted_vals[6], t)
+    }
+    else{
+      sigmoid(fitted_vals[1], fitted_vals[3], fitted_vals[5], fitted_vals[6], t)
+    }
+    })
+  lines(t, predicted, col="red", lwd=3)
+  bestvals[4, i] <- fit$optim$bestval
+  
+}
+
+
+# Test fitting the CH + asymptote model with real data
+result <- DEoptim(loss_piecewise_asymptote, lower=c(0,0,0,-40,-40,0,0,0,0), upper=c(1,5,1,40,40,1,1,1,1), control=list(NP=140, itermax=400))
+vals <- result$optim$bestmem
+
+temp <- sapply(t, function(t){
+  if(t <= (vals[2]*vals[4] - vals[3]*vals[5])/(vals[2] - vals[3])){
+    vals[1] - vals[1]/(1 + exp(-vals[2]*(t-vals[4]))) + vals[6]
+  }
+  else{
+    vals[1] - vals[1]/(1 + exp(-vals[3]*(t - vals[5]))) + vals[6]
+  }
+})
+plot(t, temp, type="l")
+
+dat_shuffle <-dat[sample(nrow(dat)),]
+folds <- cut(seq(1:nrow(dat_shuffle)), breaks = 10, labels = FALSE)
+
+error <- foreach(i=1:10,.combine='c',.noexport = c("tofit"),.packages = 'DEoptim') %do% {
+  subset <- which(folds == i)
+  dat_train <- bin_data(dat_shuffle[-subset,], 10, ability_metric)
+  assign("tofit",dat_train, envir = .GlobalEnv)
+  result <- DEoptim(loss_piecewise_asymptote, lower=c(0,0,0,-40,-40,0,0,0,0), upper=c(1,5,1,40,40,1,1,1,1), control=list(NP=140, itermax=400))
+  dat_test <- bin_data(dat_shuffle[subset,], 10, ability_metric)
+  assign("tofit",dat_test, envir = .GlobalEnv)
+  1 - (loss_piecewise_asymptote(result[[1]]$bestmem)/(sum((dat_test$ability-mean(dat_test$ability))^2)))
+}

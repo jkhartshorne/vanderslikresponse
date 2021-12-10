@@ -1,0 +1,18 @@
+library("ggplot2")
+x.base <- seq(0,40,1)
+x.p1 <- c(rep(x.base, 100))
+x.p2 <- seq(41,60,1)
+y.p1 <- c(rnorm(length(x.p1), x.p1, sd=3))
+y.p2 <- c(rnorm(length(x.p2), 40, sd=3))
+x <- c(x.p1, x.p2)
+y <- c(y.p1, y.p2)
+
+mydat<-data.frame(x=x, y=y)
+ggplot(mydat, aes(x=x, y=y)) + geom_point() + geom_smooth(method="lm", formula=y~x + I(x^2))
+summary(lm(y~x+I(x^2), data=mydat))
+
+x2.p2 <- rep(x.p2, 100)
+y2.p2 <- rnorm(x2.p2, 40, sd=3)
+mydat2<-data.frame(x=c(x.p1, x2.p2), y=c(y.p1, y2.p2))
+ggplot(mydat2, aes(x=x, y=y)) + geom_point() + geom_smooth(method="lm", formula=y~x + I(x^2)) 
+summary(lm(y~x+I(x^2), data=mydat2))
